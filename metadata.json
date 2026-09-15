@@ -1,0 +1,6 @@
+{
+  "name": "MP3 KID",
+  "description": "MP3 KID – Premium global music discovery, streaming, and authorized download platform. Proudly from The Eagle Icon Music.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
