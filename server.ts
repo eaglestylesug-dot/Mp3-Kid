@@ -877,14 +877,91 @@ async function startServer() {
   });
 
   app.get('/api/jamendo/search', async (req, res) => {
-    const q = (req.query.q as string) || 'african';
-    const limit = Number(req.query.limit) || 12;
-    const tracks = await jamendoService.searchTracks(q, limit);
+    const q = (req.query.q as string) || '';
+    const tags = (req.query.tags as string) || '';
+    const limit = Number(req.query.limit) || 16;
+    const tracks = await jamendoService.searchTracks(q, limit, tags);
     res.json({
       status: jamendoService.getStatus(),
       query: q,
+      tags,
       results: tracks,
       count: tracks.length
+    });
+  });
+
+  app.get('/api/jamendo/trending', async (req, res) => {
+    const tags = (req.query.tags as string) || 'afrobeat';
+    const limit = Number(req.query.limit) || 16;
+    const tracks = await jamendoService.getTrendingTracks(limit, tags);
+    res.json({
+      status: jamendoService.getStatus(),
+      tags,
+      results: tracks,
+      count: tracks.length
+    });
+  });
+
+  // Admin 1-Click Import Jamendo Track into MP3 KID Catalog
+  app.post('/api/admin/jamendo/import', requireAdmin, async (req, res) => {
+    const { track, isUgandan = false, isFeatured = false, isTrending = true } = req.body;
+    if (!track || !track.title || !track.artist) {
+      return res.status(400).json({ error: 'Valid track payload required' });
+    }
+
+    // Check if already in catalog
+    const existing = db.data.songs.find(s => s.id === track.id || (s.title.toLowerCase() === track.title.toLowerCase() && s.artist.toLowerCase() === track.artist.toLowerCase()));
+    if (existing) {
+      return res.json({ success: true, message: 'Track is already in your MP3 KID catalog', song: existing });
+    }
+
+    // Create or update artist
+    let artistRecord = db.data.artists.find(a => a.name.toLowerCase() === track.artist.toLowerCase());
+    if (!artistRecord) {
+      artistRecord = {
+        id: track.artistId || `artist-${Date.now()}`,
+        name: track.artist,
+        stageName: track.artist,
+        isVerified: true,
+        country: isUgandan ? 'Uganda' : 'International',
+        region: isUgandan ? 'Uganda' : 'Global',
+        profileImage: track.coverUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&q=80',
+        coverImage: track.coverUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=1200&q=80',
+        bio: `${track.artist} is an authorized recording artist distributed through MP3 KID.`,
+        genres: [track.genre || 'Afrobeats'],
+        totalPlays: track.plays || 1200,
+        totalDownloads: track.downloads || 400,
+        monthlyListeners: 8500,
+        followersCount: 320,
+        isFeatured: Boolean(isFeatured)
+      };
+      db.data.artists.push(artistRecord);
+    }
+
+    const importedSong: Song = {
+      ...track,
+      isUgandan: Boolean(isUgandan),
+      isInternational: !isUgandan,
+      isFeatured: Boolean(isFeatured),
+      isTrending: Boolean(isTrending),
+      source: 'jamendo_imported'
+    };
+
+    db.data.songs.unshift(importedSong);
+    db.data.stats.totalSongs = db.data.songs.length;
+    db.data.stats.totalArtists = db.data.artists.length;
+
+    // Set as hero banner if no banner song
+    if (!db.data.heroBanner.featuredSongId) {
+      db.data.heroBanner.featuredSongId = importedSong.id;
+      db.data.heroBanner.title = `${importedSong.title} — Hot Release`;
+      db.data.heroBanner.subtitle = `Stream and download ${importedSong.artist}'s track in high quality MP3.`;
+    }
+
+    res.json({
+      success: true,
+      message: `Successfully imported "${importedSong.title}" by ${importedSong.artist} into MP3 KID!`,
+      song: importedSong
     });
   });
 

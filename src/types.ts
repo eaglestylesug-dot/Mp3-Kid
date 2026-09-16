@@ -3,6 +3,7 @@ export interface AudioQualityOption {
   format: 'MP3';
   fileSize: string;
   bitrate: number;
+  url?: string;
 }
 
 export interface Song {
